@@ -1,35 +1,30 @@
-[![Code size](https://img.shields.io/github/languages/code-size/enesbcs/shelly_mqtt)]() [![Last commit](https://img.shields.io/github/last-commit/enesbcs/shelly_mqtt)]()
+# Shelly NG MQTT - Domoticz Python Plugin
+Welcome to the ShellyNGMqttPlugin wiki!
 
-# This plugin is free and open source, you can use forever and any purpose you like. But further improvement is stopped.
-# The experimental script which adds Shelly devices to Domoticz MQTT Autodiscovery hardware is published at https://github.com/enesbcs/shellyteacher4domo and that is currently under development.
+## Description
+Python plugin for Domoticz to control Shelly Gen 1 **and** Gen2 devices via MQTT. This plugin is based on the originalShellyMQTT - Domoticz Python Plugin of Alexander Nagy/enesbcs (https://github.com/enesbcs/Shelly_MQTT), which is discontinued.
 
-# ShellyMQTT - Domoticz Python Plugin
-Python plugin for Shelly relay devices using MQTT protocol
+This plugin support Shelly Devices from the first generation (*like the Shelly 2.5 and Shelly Plug, see https://shelly-api-docs.shelly.cloud/gen1/#shelly-family-overview()*) **AND** the second generation (*like the Shelly Plus 2 PM, see https://shelly-api-docs.shelly.cloud/gen2/#, called Shelly NG (Next Gen) - this is still a work in progress*...)
 
-MQTT parts based on heavily on the [zigbee2mqtt] project (https://github.com/stas-demydiuk/domoticz-zigbee2mqtt-plugin) 
-big thanks for it!
+**For Shelly Gen 1 devices:** When MQTT is enabled, the Cloud connection will be disabled and the Shelly devices can't be controlled remotely using the Shelly Smart Control App.
+
+In order to control the Shelly Gen 1 device remotely **and** via Domoticz, see my [Shelly NG HTTP - Domoticz Python Plugin](https://github.com/claskfosmic/ShellyNGHttpPlugin) instead.
 
 ## Prerequisites
 
-Tested and works with Domoticz v4.x.
+Tested and works with Domoticz v2024.1
 
-If you do not have a working Python >=3.5 installation, please install it first! ( https://www.domoticz.com/wiki/Using_Python_plugins )
-(if Shelly_MQTT does not appear in HW list after installation, read again the above article!)
+If you do not have a working Python >=3.5 installation, please install it first! (https://www.domoticz.com/wiki/Using_Python_plugins ). If '*Shelly NG Mqtt Plugin*' does not appear in HW list after installation, read again the above article!
 
-Setup and run MQTT broker and an MQTT capable Shelly device. (http://shelly-api-docs.shelly.cloud/#mqtt-support-beta)
-If you do not have an MQTT server yet, install Mosquitto for example:
-http://mosquitto.org/blog/2013/01/mosquitto-debian-repository/
-
-!!! Please, DO NOT CHECK "Use custom MQTT prefix" on your device settings page if you want to use this plugin as this will render device detection unusable !!!
-
-!!! For Shelly Plus HT, please prefix the MQTT topic with `shellies/` on your device settings page to make it send on the same topic as other devices !!!
+Setup and run MQTT broker and an MQTT capable Shelly device. (http://shelly-api-docs.shelly.cloud/#mqtt-support-beta). If you do not have an MQTT server yet, install Mosquitto for example:
+http://mosquitto.org/blog/2013/01/mosquitto-debian-repository/.
 
 ## Installation
 
 1. Clone repository into your domoticz plugins folder
 ```
 cd domoticz/plugins
-git clone https://github.com/enesbcs/Shelly_MQTT.git
+git clone https://github.com/claskfosmic/ShellyNGMqttPlugin.git
 ```
 2. Restart domoticz
 3. Go to "Hardware" page and add new item with type "ShellyMQTT"
@@ -38,11 +33,6 @@ git clone https://github.com/enesbcs/Shelly_MQTT.git
 
 Once plugin receive any MQTT message from Shelly it will try to create appropriate device.
 
-## Plugin install&update with plugin manager
-
-I suggest to use a plugin manager for easy updates through Domoticz GUI:
-https://github.com/stas-demydiuk/domoticz-plugins-manager
-
 ## Plugin manual update
 
 Warning: if you use this method, Domoticz may duplicate devices after it!
@@ -50,14 +40,28 @@ Warning: if you use this method, Domoticz may duplicate devices after it!
 1. Stop domoticz
 2. Go to plugin folder and pull new version
 ```
-cd domoticz/plugins/Shelly_MQTT
+cd domoticz/plugins/ShellyNGMqttPlugin
 git pull
 ```
 3. Start domoticz
 
+## Configuration on your Shelly devices (*use the WebInterface or the Shelly Smart Control App*)
+
+### For Shelly Devices from the first generation, like the Shelly 2.5:
+- Enable '*MQTT*' under '*Internet &amp; Security*' -> '*ADVANCED - DEVELOPER SETTINGS*'.
+- Do **NOT** use a custom MQTT prefix, the topic should be '*shellies/shellyswitch25-XXXXXXXXXXXX*'.
+- ! WARNING: If you enable MQTT - actions via Cloud connection will be disabled!
+
+### For Shelly Devices from the second generation, like the Shelly Plus 2 PM:
+- Enable the '*MQTT network*' under '*Settings*' -> 'Connectivity settings' -> '*MQTT*'.
+- Make sure the MQTT-prefix starts with 'shellies/', just like the first generation, so the MQTT prefix will look like: '*shellies/shellyplus2pm-XXXXXXXXXXXX*'.
+- Do **NOT** change the rest of the prefix, the part '*shellyplus2pm-XXXXXXXXXXXX*' is used to detect the type of device.
+- Make sure the options '*Enable "MQTT Control*', '*Enable RPC over MQTT*' and '*RPC status notifications over MQTT*' are enabled.<
+- Do **NOT** enable the option 'Generic status update over MQTT', because this will break the energy measurements.
+
 ## Supported devices
 
-Tested and working with:
+Based on the original plugin from Alexander Nagy/enesbcs, tested and working with:
  - Shelly 1 Open Source (relay)
  - Shelly 1PM (relay)*
  - Shelly Plug (relay)*
@@ -82,6 +86,18 @@ Tested and working with:
  - Shelly Motion
  - Shelly Plus H&T (by setting MQTT prefix to `shellies`)
 
-*Power consumption can be enabled in the plugin settings page manually, it's an optional feature without any further support
+Based on my own tests, everything works for:
+ - Gen 1:
+   - Shelly 1PM (relay)*
+   - Shelly Plug (relay)*
+   - Shelly Plug S (relay)*
+   - Shelly 2.5 (relay, roller not yet tested)*
+   - Shelly Dimmer 2
+   - Shelly Color Bulb
+   - Shelly Motion
+ - Gen 2:
+   - Shelly Plus 1 PM
+   - Shelly Plus 2 PM
+   - Shelly Plus i4
 
-**I would like to thank [Allterco Robotics](https://allterco.com/en/Shelly) for providing me with samples of Shelly Plug/Shelly2/Shelly4/Shelly RGBW2/Shelly Dimmer2/Shelly Bulb Duo/Shelly i3/Shelly Motion to support the development of this plugin.**
+**Power consumption can be enabled in the plugin settings page manually, it's an optional feature without any further support*
