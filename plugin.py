@@ -1782,14 +1782,14 @@ def updateGen2Device(mqttpath, original_message, powerReadSetting=0, absPowerSet
 			for param, paramValues in original_message['params'].items():
 				Domoticz.Debug('Gen2:updateGen2Device :: Got param \'%s\' with values \'%s\' for path \'%s\'.' % (param, paramValues, mqttpath[1]))
 				#
-				if param.startswith('switch:'):
+				if param.startswith('switch:') or param.startswith('cover:'):
 					for paramKey, paramValue in paramValues.items():
 						
 						switchName = mqttpath[1]+'-'+str(paramValues['id'])
 						Domoticz.Debug('Gen2:updateGen2Device :: Got paramKey \'%s\' with paramValue \'%s\' (powerReadSetting: %s) for path \'%s\'.' % (paramKey, paramValue, powerReadSetting, mqttpath[1]))
 					
 						# Only continue for valid paramKeys
-						if not paramKey in ['output', 'apower', 'current', 'pf', 'voltage', 'aenergy'] or ( paramKey == 'apower' and powerReadSetting == 0):
+						if not paramKey in ['output', 'current_pos', 'apower', 'current', 'pf', 'voltage', 'aenergy'] or ( paramKey == 'apower' and powerReadSetting == 0):
 							continue
 						
 						if paramKey == 'apower' or paramKey == 'aenergy':
@@ -1834,6 +1834,8 @@ def updateGen2Switch(switchName, paramKey, paramValue, powerReadSetting, absPowe
 	iUnit = searchdevice(switchName)
 	if iUnit<0 and str(Settings['AcceptNewHardware'])!='0': # if device does not exists in Domoticz, than create it
 		try:
+			# Handle switch
+			#
 			if paramKey == 'output':
 				devparams = {
 					'Name' : switchName,
@@ -1842,6 +1844,25 @@ def updateGen2Switch(switchName, paramKey, paramValue, powerReadSetting, absPowe
 					'DeviceID' : switchName
 				}
 				iUnit = adddevice(**devparams)
+			# Handle cover/blinds
+			#
+			elif paramKey == 'current_pos':
+				devparams = {
+					'Name' : switchName,
+					# 'TypeName' :'Blinds Percentage',
+					'Type': 244,
+					'Subtype': 62,
+					#'Switchtype': 3,	# Blinds
+					#'Switchtype': 13,	# Blinds Percentage
+					#'Switchtype': 14,	# Venetian Blinds US
+					#'Switchtype': 15,	# Venetian Blinds EN
+					'Switchtype': 21,	# Blinds Percentage With Stop	
+					'Used':1,
+					'DeviceID' : switchName
+				}
+				iUnit = adddevice(**devparams)
+			# Handle power
+			#
 			elif paramKey in ['apower', 'aenergy']:
 				
 				imageId = 0
@@ -1857,6 +1878,8 @@ def updateGen2Switch(switchName, paramKey, paramValue, powerReadSetting, absPowe
 					'Image': imageId
 				}
 				iUnit = adddevice(**devparams)
+			# Handle energy
+			#
 			elif paramKey == '_energy':
 				devparams = {
 					'Name': switchName,
@@ -1866,7 +1889,8 @@ def updateGen2Switch(switchName, paramKey, paramValue, powerReadSetting, absPowe
 					'DeviceID' : switchName
 				}
 				iUnit = adddevice(**devparams)
-
+			# Handle current
+			#
 			elif paramKey == 'current':
 				devparams = {
 					'Name' : switchName,
@@ -1876,6 +1900,8 @@ def updateGen2Switch(switchName, paramKey, paramValue, powerReadSetting, absPowe
 					'DeviceID' : switchName
 				}
 				iUnit = adddevice(**devparams)
+			# Handle pf
+			#
 			elif paramKey == 'pf':
 				devparams = {
 					'Name' : switchName,
@@ -1914,6 +1940,20 @@ def updateGen2Switch(switchName, paramKey, paramValue, powerReadSetting, absPowe
 			else:
 				Domoticz.Debug('Gen2:updateGen2Switch :: Update switch \'%s\' - nValue: 0, sValue: \'%s\' - from paramKey \'%s\'' % (Devices[iUnit].Name, 'Off', paramKey))
 				Devices[iUnit].Update(nValue=0,sValue="Off")
+		except Exception as e:
+			Domoticz.Debug(str(e))
+			return False
+		return True
+	
+	elif paramKey == 'current_pos':
+		try:
+			coverPos = int(str(paramValue).strip())
+			if(coverPos >= 40):
+				nValue = 1
+			else:
+				nValue = 0
+			Domoticz.Debug('Gen2:updateGen2Switch :: Update cover \'%s\' -  nValue: \'%s\' -  sValue: \'%s\' - from paramKey \'%s\'' % (Devices[iUnit].Name, nValue, coverPos, paramKey))
+			Devices[iUnit].Update(nValue=nValue,sValue=str(coverPos))
 		except Exception as e:
 			Domoticz.Debug(str(e))
 			return False
@@ -2190,7 +2230,44 @@ def getGen2DeviceCommand(unitName, src, command, level, color):
 					"on": (command == "on")
 				}
 			}
-
+		elif command == "open" or (command == "set level" and level >= 100):
+			return {
+				"id": 1,
+				"source": src,
+				"method": "Cover.Open",
+				"params": {
+					"id": switchId,
+				}
+			}
+		elif command == "close" or (command == "set level" and level <= 0):
+			return {
+				"id": 1,
+				"source": src,
+				"method": "Cover.Close",
+				"params": {
+					"id": switchId,
+				}
+			}
+		elif command == "stop":
+			return {
+				"id": 1,
+				"source": src,
+				"method": "Cover.Stop",
+				"params": {
+					"id": switchId,
+				}
+			}
+		elif command == "set level":
+			return {
+				"id": 1,
+				"source": src,
+				"method": "Cover.GoToPosition",
+				"params": {
+					"id": switchId,
+					"pos": level
+				}
+			}
+	
 	return None
 
 ###
