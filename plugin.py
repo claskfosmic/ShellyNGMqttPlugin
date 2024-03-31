@@ -151,9 +151,15 @@ class BasePlugin:
 		'shellyplusht',
 	]
 
+	SHELLY_BLU_PREFIXES =[
+		"shellyblu-Door-Window-",
+		"shellyblu-Motion-",
+	]
+
 	#
 	SHELLY_GEN_1="GEN1"
 	SHELLY_GEN_2="GEN2"
+	SHELLY_BLU="BLU"
 
 	#
 	def __init__(self):
@@ -164,6 +170,11 @@ class BasePlugin:
 		for gen2topixPrefix in self.SHELLY_GEN_2_PREFIXES:
 			if topicPrefix.startswith(gen2topixPrefix):
 				return self.SHELLY_GEN_2
+
+		for bluTopixPrefix in self.SHELLY_BLU_PREFIXES:
+			if topicPrefix.startswith(bluTopixPrefix):
+				return self.SHELLY_BLU
+
 		return self.SHELLY_GEN_1
 
 	def _updatedevice(self,devname):
@@ -313,6 +324,10 @@ class BasePlugin:
 					self.mqttClient.publish(mqttpath+"/rpc", cmd)
 				except Exception as e:
 					Domoticz.Debug(str(e))
+
+		# if self.getGen(devname) == self.SHELLY_BLU:
+			# mqttpath = self.base_topic+"/"+device_id[0]+"-"+device_id[1]
+
 		
 		# Check if is it a normal relay
 		#
@@ -522,6 +537,9 @@ class BasePlugin:
 		
 		mqttpath = topic.split('/')
 		if (mqttpath[0] == self.base_topic):
+
+			Domoticz.Debug("Got gen '%s' based on topic '%s'" % (self.getGen(mqttpath[1]), topic))
+
 			if self.alive: # if device heartbeat enabled
 				if self._updatedevice(str(mqttpath[1])): # if update needed
 					unitname = mqttpath[1]+"-online"
@@ -538,6 +556,10 @@ class BasePlugin:
 			# Shelly Gen 2
 			if self.getGen(mqttpath[1]) == self.SHELLY_GEN_2:
 				return updateGen2Device(mqttpath, original_message, self.powerread, self.abspwr)
+			
+			elif self.getGen(mqttpath[1]) == self.SHELLY_BLU:
+				return updateBluDevice(mqttpath, original_message)
+
 			# RELAY and EMETER type, not command->process (Shelly relays, EM & EM3)
 			elif ( (len(mqttpath)>4) and (mqttpath[4] in ["power","energy"]) ) or ( (len(mqttpath)>3) and (mqttpath[2] in ["relay","emeter"]) and ("/command" not in topic) ):
 				return updateRelayAndMeter(mqttpath, message, self.powerread, self.abspwr)
@@ -2170,3 +2192,110 @@ def getGen2DeviceCommand(unitName, src, command, level, color):
 			}
 
 	return None
+
+###
+#
+def updateBluDevice(mqttpath, original_message):
+	
+	# Handle Blu-device update (sent via Bluetooth to a Shelly Plus device, passing it over to MQTT
+	# using the "Blu_to_MQTT v1.4 + Blu_Events v2.4" script
+	# (See: https://www.shelly-support.eu/forum/thread/20395-shelly-script-blu-to-mqtt-v1-4/)
+	#
+	if (len(mqttpath)==4) and ( (mqttpath[2] == "info") or (mqttpath[2] == "status") ):
+		inputName = mqttpath[1].replace("-Door","door").replace("-Window","window").replace("-Motion","motion").replace(":","")
+
+		if (mqttpath[2] == 'info') and (mqttpath[3] == 'battery'):
+			updateBluDeviceValue(inputName, "battery", original_message)
+		elif (mqttpath[2] == 'status') and (mqttpath[3] == 'deviceState'):
+			updateBluDeviceValue(inputName, "", original_message)
+		elif (mqttpath[2] == 'status') and (mqttpath[3] == 'illuminance'):
+			updateBluDeviceValue(inputName, "lux", original_message)
+
+def updateBluDeviceValue(sensorName, paramKey, paramValue):
+	if not paramKey == "":
+		sensorName = sensorName+"-"+paramKey
+	
+	iUnit = searchdevice(sensorName)
+	if iUnit<0 and str(Settings["AcceptNewHardware"])!="0": # if device does )not exists in Domoticz, than create it
+		try:
+			devparams = None
+
+			if paramKey == "lux":
+				devparams = {
+					"Name" : sensorName,
+					"Unit": 2, # iUnit,
+					# "TypeName": "Switch",
+					"Type": 246, # Lux
+					"Subtype": 1, # Lux
+					"Used" : 1 ,
+					"DeviceID": sensorName,
+				}
+
+			elif paramKey == "battery":
+				devparams = {
+					"Name" : sensorName,
+					"Unit": 3, # iUnit,
+					"Type": 243, # General
+					"Subtype": 6, # Percentage
+					"Used" : 0 ,
+					"DeviceID": sensorName,
+				}
+
+			elif paramKey == "":
+				if (paramValue == "open") or (paramValue == "closed"):
+					devparams = {
+						"Name" : sensorName,
+						"Unit": 1, # iUnit,
+						"Type": 244, # Light/Switch
+						"Subtype": 0, #
+						"Switchtype": 11, # DoorContact
+						"Used" : 1 ,
+						"DeviceID": sensorName,
+					}
+					
+				elif (paramValue == "no_motion") or (paramValue == "motion_detected"):
+					devparams = {
+						"Name" : sensorName,
+						"Unit": 1, # iUnit,
+						# "TypeName": "Switch",
+						"Type": 244, # Light/Switch
+						"Subtype": 0, # Switch
+						"Switchtype": 8, # Motion Sensor
+						"Used" : 1 ,
+						"DeviceID": sensorName,
+					}
+
+			if not devparams == None:
+				   
+				# Create the Domoticz device
+				iUnit = adddevice( **devparams )
+
+		except Exception as e:
+			Domoticz.Debug(str(e))
+			return False
+
+	if iUnit<0:
+		return False
+
+	try:
+		if (paramKey == "lux") or (paramKey == "battery"):
+			Devices[iUnit].Update(nValue=0,sValue=str(float(paramValue)))
+			return True
+		
+		elif(paramKey == ""):
+			if (paramValue == "open"):
+				Devices[iUnit].Update(nValue=1,sValue="Open")
+			elif (paramValue == "closed"):
+				Devices[iUnit].Update(nValue=0,sValue="Closed")
+
+			elif (paramValue == "motion_detected"):
+				Devices[iUnit].Update(nValue=1,sValue="Motion")
+			elif (paramValue == "no_motion"):
+				Devices[iUnit].Update(nValue=0,sValue="Off")
+			return True
+	
+	except Exception as e:
+		Domoticz.Debug(str(e))
+
+	# End of Gen2 Input Handling
+	return False
