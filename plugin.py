@@ -1769,6 +1769,18 @@ def updateGen2Device(mqttpath, original_message, powerReadSetting=0, absPowerSet
 	# Handle RPC status notifications over MQTT
 	#
 	if (len(mqttpath)==4) and (mqttpath[2] == "events") and (mqttpath[3] == "rpc"):
+
+		ignoreInputState = False
+		ignoreInputStateReason = ""
+
+		if original_message['method'] == 'NotifyFullStatus' and 'sys' in original_message['params']:
+			if 'uptime' in original_message['params']['sys'] and original_message['params']['sys']['uptime'] < 30:
+				ignoreInputState = True
+				ignoreInputStateReason = "got 'NotifyFullStatus' and uptime is only %s seconds" % original_message['params']['sys']['uptime']
+			elif 'reset_reason' in original_message['params']['sys'] and original_message['params']['sys']['reset_reason'] == 3:
+				ignoreInputState = True
+				ignoreInputStateReason = "got 'NotifyFullStatus' and reset_reason is set to %s " % original_message['params']['sys']['reset_reason']
+
 		# Check if we're dealing with a Shelly H&T
 		#
 		if original_message['method'] == 'NotifyFullStatus' and 'ht_ui' in original_message['params']:
@@ -1808,11 +1820,18 @@ def updateGen2Device(mqttpath, original_message, powerReadSetting=0, absPowerSet
 
 				#
 				elif param.startswith('input:'):
-					for paramKey, paramValue in paramValues.items():
+					
+					# Check if the state of the input should be ignored or not... if so, continue
+	 				#
+					if ignoreInputState:
+						Domoticz.Log('Gen2:updateGen2Device :: Ignoring input state/param \'%s\' for path \'%s\', because %s .' % (param, mqttpath[1], ignoreInputStateReason))
+						continue
 
-						if paramKey == 'state':
-							inputName = mqttpath[1]+"-"+str(paramValues['id'])+'-input'
-							updateGen2Input(inputName, paramKey, paramValue)
+					else:
+						for paramKey, paramValue in paramValues.items():
+							if paramKey == 'state':
+								inputName = mqttpath[1]+"-"+str(paramValues['id'])+'-input'
+								updateGen2Input(inputName, paramKey, paramValue)
 
 				#
 				elif param == 'events':
